@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>高级数据可视化工具</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin: 20px 0;
+            height: 500px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .chart-wrapper {
+            height: 420px;
+            width: 100%;
+            position: relative;
+        }
+
+        .config-panel {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        input[type="text"], input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+
+        .color-picker {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            vertical-align: middle;
+        }
+
+        .chart-controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 2;
+            background: rgba(255,255,255,0.9);
+            padding: 5px;
+            border-radius: 5px;
+            display: flex;
+            gap: 5px;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 2;
+            display: flex;
+            gap: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="color: #2c3e50; text-align: center;">高级数据可视化工具</h2>
+
+    <div class="config-panel">
+        <input type="file" id="csvFile" accept=".csv">
+        <button onclick="addNewChart()">+ 添加新图表</button>
+        <p style="color: #666; margin-top: 10px;">提示：右键点击图表可保存图片;Ctrl+滚轮可缩放;<strong>目前仅支持.csv格式！！！</strong></p>
+    </div>
+
+    <div id="chartsContainer"></div>
+
+<script>
+let csvData = [];
+let headers = [];
+const chartConfigs = new Map();
+const colors = ['#4CAF50', '#2196F3', '#FF5722', '#9C27B0', '#FFC107'];
+
+// 初始化第一个图表
+addNewChart();
+
+function addNewChart() {
+    const chartId = `chart-${Date.now()}`;
+    const config = {
+        x: '',
+        y: '',
+        color: colors[chartConfigs.size % colors.length],
+        type: 'line',
+        chart: null
+    };
+
+    const chartHTML = `
+        <div class="chart-container">
+            <div class="chart-controls">
+                <select onchange="changeChartType('${chartId}', this.value)">
+                    <option value="line">折线图</option>
+                    <option value="bar">柱状图</option>
+                    <option value="scatter">散点图</option>
+                </select>
+                <input type="color" class="color-picker" 
+                       value="${config.color}"
+                       onchange="changeChartColor('${chartId}', this.value)">
+                <button onclick="downloadChart('${chartId}')">↓ 下载</button>
+                <button onclick="removeChart('${chartId}')">× 删除</button>
+            </div>
+            <div class="config-panel">
+                <input type="text" id="${chartId}-x" placeholder="X轴字段">
+                <input type="text" id="${chartId}-y" placeholder="Y轴字段">
+                <button onclick="drawChart('${chartId}')">生成图表</button>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="${chartId}"></canvas>
+            </div>
+            <div class="zoom-controls">
+                <button onclick="resetZoom('${chartId}')">重置缩放</button>
+            </div>
+        </div>
+    `;
+
+    chartConfigs.set(chartId, config);
+    document.getElementById('chartsContainer').insertAdjacentHTML('beforeend', chartHTML);
+}
+
+function removeChart(chartId) {
+    const config = chartConfigs.get(chartId);
+    if (config.chart) config.chart.destroy();
+    chartConfigs.delete(chartId);
+    document.querySelector(`#${chartId}`).closest('.chart-container').remove();
+}
+
+function resetZoom(chartId) {
+    const config = chartConfigs.get(chartId);
+    if (config.chart) {
+        config.chart.resetZoom();
+        config.chart.reset();
+    }
+}
+
+function downloadChart(chartId) {
+    const canvas = document.getElementById(chartId);
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `chart-${chartId}.png`;
+    a.click();
+}
+
+function changeChartType(chartId, type) {
+    const config = chartConfigs.get(chartId);
+    config.type = type;
+    if (config.chart) drawChart(chartId);
+}
+
+function changeChartColor(chartId, color) {
+    const config = chartConfigs.get(chartId);
+    config.color = color;
+    if (config.chart) drawChart(chartId);
+}
+
+function drawChart(chartId) {
+    try {
+        const config = chartConfigs.get(chartId);
+        const xField = document.getElementById(`${chartId}-x`).value.trim();
+        const yField = document.getElementById(`${chartId}-y`).value.trim();
+
+        if (!xField || !yField) throw new Error("请填写X/Y轴字段");
+        if (!headers.includes(xField)) throw new Error(`X轴字段不存在: ${xField}`);
+        if (!headers.includes(yField)) throw new Error(`Y轴字段不存在: ${yField}`);
+
+        const xValues = csvData.map(item => parseFloat(item[xField]));
+        const yValues = csvData.map(item => parseFloat(item[yField]));
+
+        if (xValues.some(isNaN)) throw new Error("X轴包含非数值数据");
+        if (yValues.some(isNaN)) throw new Error("Y轴包含非数值数据");
+
+        if (config.chart) config.chart.destroy();
+
+        const ctx = document.getElementById(chartId).getContext('2d');
+        config.chart = new Chart(ctx, {
+            type: config.type,
+            data: {
+                labels: xValues,
+                datasets: [{
+                    label: `${yField} vs ${xField}`,
+                    data: config.type === 'scatter' ? 
+                        yValues.map((y, i) => ({x: xValues[i], y})) :
+                        yValues,
+                    borderColor: config.color,
+                    backgroundColor: config.type === 'bar' ? 
+                        `${config.color}80` : config.color,
+                    borderWidth: 1,
+                    pointRadius: config.type === 'scatter' ? 
+                        Math.min(8, Math.max(5, 1000 / xValues.length)) : // 散点图优化
+                        (xValues.length > 1000 ? 0 : 3),
+                    pointStyle: 'circle',
+                    pointHoverRadius: 10,
+                    tension: config.type === 'line' ? 0.4 : 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    zoom: {
+                        zoom: {
+                            wheel: { enabled: true, speed: 0.1 },
+                            pinch: { enabled: true },
+                            mode: 'xy'
+                        },
+                        pan: {
+                            enabled: true,
+                            mode: 'xy'
+                        }
+                    },
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: `${yField} vs ${xField}`,
+                        font: { size: 16 }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'linear',
+                        title: { 
+                            display: true, 
+                            text: xField,
+                            font: { weight: 'bold' }
+                        },
+                        grid: { color: '#eee' },
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 20,
+                            maxRotation: 0
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        title: { 
+                            display: true, 
+                            text: yField,
+                            font: { weight: 'bold' }
+                        },
+                        grid: { color: '#eee' },
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 10
+                        }
+                    }
+                },
+                animation: {
+                    duration: xValues.length > 500 ? 0 : 1000,
+                    easing: 'easeOutQuart'
+                }
+            }
+        });
+
+    } catch (error) {
+        alert(error.message);
+        console.error(error);
+    }
+}
+
+// CSV处理
+document.getElementById('csvFile').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function() {
+        try {
+            let text = reader.result;
+            if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+            
+            const rows = text.split(/\r?\n/).filter(row => row.trim());
+            headers = rows[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/)
+                           .map(h => h.trim().replace(/^"(.*)"$/, '$1'));
+            
+            csvData = rows.slice(1).map(row => {
+                const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+                return headers.reduce((obj, h, i) => {
+                    obj[h] = values[i] ? values[i].trim().replace(/^"(.*)"$/, '$1') : '';
+                    return obj;
+                }, {});
+            });
+
+            chartConfigs.forEach((_, id) => drawChart(id));
+
+        } catch (error) {
+            alert(`CSV解析错误: ${error.message}`);
+        }
+    };
+    
+    reader.readAsText(file, 'UTF-8');
+});
+
+// 窗口大小调整处理
+window.addEventListener('resize', () => {
+    chartConfigs.forEach(config => {
+        if (config.chart) {
+            config.chart.resize();
+        }
+    });
+});
+</script>
+</body>
+</html>
