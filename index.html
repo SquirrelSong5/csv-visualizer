@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>高级数据可视化工具</title>
+    <title>CSV数据可视化工具（待完善）</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.0"></script>
     <style>
@@ -12,7 +12,6 @@
             padding: 20px;
             background-color: #f5f7fa;
         }
-
         .chart-container {
             background: white;
             border-radius: 10px;
@@ -23,13 +22,11 @@
             overflow: hidden;
             position: relative;
         }
-
         .chart-wrapper {
             height: 420px;
             width: 100%;
             position: relative;
         }
-
         .config-panel {
             background: white;
             border-radius: 8px;
@@ -37,7 +34,6 @@
             margin: 15px 0;
             box-shadow: 0 1px 5px rgba(0,0,0,0.05);
         }
-
         button {
             background: #4CAF50;
             color: white;
@@ -47,25 +43,21 @@
             cursor: pointer;
             transition: background 0.3s;
         }
-
         button:hover {
             background: #45a049;
         }
-
         input[type="text"], input[type="file"] {
             padding: 8px;
             border: 1px solid #ddd;
             border-radius: 4px;
             margin: 5px;
         }
-
         .color-picker {
             width: 30px;
             height: 30px;
             padding: 0;
             vertical-align: middle;
         }
-
         .chart-controls {
             position: absolute;
             top: 10px;
@@ -77,7 +69,6 @@
             display: flex;
             gap: 5px;
         }
-
         .zoom-controls {
             position: absolute;
             bottom: 10px;
@@ -89,24 +80,33 @@
     </style>
 </head>
 <body>
-    <h2 style="color: #2c3e50; text-align: center;">CSV数据可视化工具（待完善）</h2>
+    <h2 style="color: #2c3e50; text-align: center;">高级数据可视化工具</h2>
 
     <div class="config-panel">
         <input type="file" id="csvFile" accept=".csv">
         <button onclick="addNewChart()">+ 添加新图表</button>
-        <p style="color: #666; margin-top: 10px;">提示：Ctrl+滚轮可缩放;<strong>目前仅支持.csv格式</strong></p>
+        <p style="color: #666; margin-top: 10px;">提示：滚轮可缩放图表；点击右上角按钮可下载图表；<strong>目前仅支持.csv格式</strong></p>
     </div>
 
     <div id="chartsContainer"></div>
 
 <script>
+// 白色背景插件
+const whiteBackgroundPlugin = {
+    id: 'whiteBackground',
+    beforeDraw: (chart) => {
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, chart.width, chart.height);
+        ctx.restore();
+    }
+};
+
 let csvData = [];
 let headers = [];
 const chartConfigs = new Map();
 const colors = ['#4CAF50', '#2196F3', '#FF5722', '#9C27B0', '#FFC107'];
-
-// 初始化第一个图表
-addNewChart();
 
 function addNewChart() {
     const chartId = `chart-${Date.now()}`;
@@ -167,7 +167,18 @@ function resetZoom(chartId) {
 
 function downloadChart(chartId) {
     const canvas = document.getElementById(chartId);
-    const url = canvas.toDataURL('image/png');
+    const tempCanvas = document.createElement('canvas');
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    
+    // 绘制白色背景
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+    tempCtx.drawImage(canvas, 0, 0);
+    
+    const url = tempCanvas.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url;
     a.download = `chart-${chartId}.png`;
@@ -207,6 +218,7 @@ function drawChart(chartId) {
         const ctx = document.getElementById(chartId).getContext('2d');
         config.chart = new Chart(ctx, {
             type: config.type,
+            plugins: [whiteBackgroundPlugin],
             data: {
                 labels: xValues,
                 datasets: [{
@@ -219,7 +231,7 @@ function drawChart(chartId) {
                         `${config.color}80` : config.color,
                     borderWidth: 1,
                     pointRadius: config.type === 'scatter' ? 
-                        Math.min(8, Math.max(5, 1000 / xValues.length)) : // 散点图优化
+                        Math.min(8, Math.max(5, 1000 / xValues.length)) : 
                         (xValues.length > 1000 ? 0 : 3),
                     pointStyle: 'circle',
                     pointHoverRadius: 10,
@@ -292,7 +304,6 @@ function drawChart(chartId) {
     }
 }
 
-// CSV处理
 document.getElementById('csvFile').addEventListener('change', function(e) {
     const file = e.target.files[0];
     const reader = new FileReader();
@@ -324,7 +335,6 @@ document.getElementById('csvFile').addEventListener('change', function(e) {
     reader.readAsText(file, 'UTF-8');
 });
 
-// 窗口大小调整处理
 window.addEventListener('resize', () => {
     chartConfigs.forEach(config => {
         if (config.chart) {
