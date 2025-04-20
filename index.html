@@ -166,24 +166,43 @@ function resetZoom(chartId) {
 }
 
 function downloadChart(chartId) {
-    const canvas = document.getElementById(chartId);
-    const tempCanvas = document.createElement('canvas');
-    const tempCtx = tempCanvas.getContext('2d');
-    
-    tempCanvas.width = canvas.width;
-    tempCanvas.height = canvas.height;
-    
-    // 绘制白色背景
-    tempCtx.fillStyle = 'white';
-    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-    tempCtx.drawImage(canvas, 0, 0);
-    
-    const url = tempCanvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chart-${chartId}.png`;
-    a.click();
-}
+            const config = chartConfigs.get(chartId);
+            
+            // 新增有效性校验
+            if (!config || !config.chart) {
+                alert('请先生成图表！');
+                return;
+            }
+
+            const canvas = document.getElementById(chartId);
+            if (!canvas) {
+                alert('图表元素不存在！');
+                return;
+            }
+
+            // 转换为2D上下文检查是否有内容
+            const ctx = canvas.getContext('2d');
+            if (ctx.getImageData(0, 0, 1, 1).data[3] === 0) {
+                alert('图表内容为空，无法下载！');
+                return;
+            }
+
+            // 保持原有的下载逻辑
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            
+            tempCtx.fillStyle = 'white';
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+            tempCtx.drawImage(canvas, 0, 0);
+            
+            const url = tempCanvas.toDataURL('image/png');
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chart-${chartId}.png`;
+            a.click();
+        }
 
 function changeChartType(chartId, type) {
     const config = chartConfigs.get(chartId);
